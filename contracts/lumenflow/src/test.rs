@@ -1206,3 +1206,139 @@ fn test_set_min_refund_amount_zero_fails() {
     let result = client.try_set_min_refund_amount(&admin, &0i128);
     assert_eq!(result, Err(Ok(PaymentError::InvalidAmount)));
 }
+
+// ── Issue #1023: validate token in create_payment_request ─────────────────────
+
+#[test]
+fn test_create_payment_request_with_disallowed_token_fails() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let merchant = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    // Create a token but do NOT add it to the allowed list
+    let disallowed_token = create_token(&env, &token_admin);
+
+    client.set_admin(&admin);
+    client.register_merchant(
+        &merchant,
+        &str(&env, "Shop"),
+        &str(&env, ""),
+        &str(&env, ""),
+        &MerchantCategory::Retail,
+    );
+
+    // Creating a payment request with a disallowed token must fail at creation time
+    let result = client.try_create_payment_request(
+        &merchant,
+        &str(&env, "REQ_001"),
+        &disallowed_token,
+        &500i128,
+        &str(&env, "Invoice"),
+        &3600u64,
+    );
+    assert_eq!(result, Err(Ok(PaymentError::TokenNotAllowed)));
+}
+
+#[test]
+fn test_create_payment_request_with_allowed_token_succeeds() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let merchant = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token = create_token(&env, &token_admin);
+
+    client.set_admin(&admin);
+    client.add_allowed_token(&admin, &token);
+    client.register_merchant(
+        &merchant,
+        &str(&env, "Shop"),
+        &str(&env, ""),
+        &str(&env, ""),
+        &MerchantCategory::Retail,
+    );
+
+    // Should succeed with an allowed token
+    client.create_payment_request(
+        &merchant,
+        &str(&env, "REQ_002"),
+        &token,
+        &500i128,
+        &str(&env, "Invoice"),
+        &3600u64,
+    );
+}
+
+#[test]
+fn test_payment_request_success_and_pay() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let merchant = Address::generate(&env);
+    let payer = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token = create_token(&env, &token_admin);
+
+    client.set_admin(&admin);
+    client.add_allowed_token(&admin, &token);
+    client.register_merchant(
+        &merchant,
+        &str(&env, "Shop"),
+        &str(&env, ""),
+        &str(&env, ""),
+        &MerchantCategory::Retail,
+    );
+    mint(&env, &token, &token_admin, &payer, 10_000);
+
+    // Create a payment request
+    client.create_payment_request(
+        &merchant,
+        &str(&env, "REQ_003"),
+        &token,
+        &1_000i128,
+        &str(&env, "Order #3"),
+        &3600u64,
+    );
+
+    // Pay it
+    client.pay_payment_request(&payer, &str(&env, "REQ_003"));
+
+    // Verify the payment was recorded
+    let payment = client.get_payment_by_id(&payer, &str(&env, "REQ_003"));
+    assert_eq!(payment.amount, 1_000i128);
+}
+
+#[test]
+fn test_payment_request_expired_fails() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let merchant = Address::generate(&env);
+    let payer = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token = create_token(&env, &token_admin);
+
+    client.set_admin(&admin);
+    client.add_allowed_token(&admin, &token);
+    client.register_merchant(
+        &merchant,
+        &str(&env, "Shop"),
+        &str(&env, ""),
+        &str(&env, ""),
+        &MerchantCategory::Retail,
+    );
+    mint(&env, &token, &token_admin, &payer, 10_000);
+
+    // Create request with 1-second TTL
+    client.create_payment_request(
+        &merchant,
+        &str(&env, "REQ_EXP"),
+        &token,
+        &500i128,
+        &str(&env, "expires soon"),
+        &1u64,
+    );
+
+    // Advance time past expiry
+    env.ledger().with_mut(|l| l.timestamp += 10);
+
+    let result = client.try_pay_payment_request(&payer, &str(&env, "REQ_EXP"));
+    assert_eq!(result, Err(Ok(PaymentError::PaymentExpired)));
+}
