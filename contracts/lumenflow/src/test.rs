@@ -1206,3 +1206,57 @@ fn test_set_min_refund_amount_zero_fails() {
     let result = client.try_set_min_refund_amount(&admin, &0i128);
     assert_eq!(result, Err(Ok(PaymentError::InvalidAmount)));
 }
+
+// ── Issue #1024: get_contract_config tests ────────────────────────────────────
+
+#[test]
+fn test_get_contract_config_defaults() {
+    let (env, client) = setup();
+
+    // Should return defaults without admin being set
+    let config = client.get_contract_config();
+    assert_eq!(config.platform_fee_bps, 0);
+    assert_eq!(config.refund_window_secs, 30 * 24 * 3600);
+    assert_eq!(config.min_refund_amount, 1);
+    assert_eq!(config.multisig_expiry_duration_secs, 7 * 24 * 3600);
+    assert_eq!(config.max_refunds_per_order, 5);
+    assert_eq!(config.payment_cleanup_period_secs, 30 * 24 * 3600);
+    assert_eq!(config.large_payment_threshold, 10_000_000);
+}
+
+#[test]
+fn test_get_contract_config_reflects_admin_changes() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    client.set_admin(&admin);
+
+    // Change several parameters
+    client.set_platform_fee(&admin, &150);
+    client.set_refund_window(&admin, &14 * 24 * 3600);
+    client.set_min_refund_amount(&admin, &500i128);
+    client.set_multisig_expiry_duration(&admin, &3 * 24 * 3600);
+    client.set_max_refunds_per_order(&admin, &10);
+    client.set_payment_cleanup_period(&admin, &60 * 24 * 3600);
+    client.set_large_payment_threshold(&admin, &5_000_000i128);
+
+    let config = client.get_contract_config();
+    assert_eq!(config.platform_fee_bps, 150);
+    assert_eq!(config.refund_window_secs, 14 * 24 * 3600);
+    assert_eq!(config.min_refund_amount, 500i128);
+    assert_eq!(config.multisig_expiry_duration_secs, 3 * 24 * 3600);
+    assert_eq!(config.max_refunds_per_order, 10);
+    assert_eq!(config.payment_cleanup_period_secs, 60 * 24 * 3600);
+    assert_eq!(config.large_payment_threshold, 5_000_000i128);
+}
+
+#[test]
+fn test_get_contract_config_callable_by_anyone() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    client.set_admin(&admin);
+    client.set_platform_fee(&admin, &100);
+
+    // Call without any auth — should succeed (read-only)
+    let config = client.get_contract_config();
+    assert_eq!(config.platform_fee_bps, 100);
+}

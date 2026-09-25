@@ -22,6 +22,7 @@ use types::{
     BatchPaymentItem, GlobalStats, MerchantCategory, MultisigPayment, PaymentFilter, PaymentOrder,
     PaymentPage, PaymentStatus, RefundRecord, RefundStatus, SortField, SortOrder,
     StatusFilter, Merchant, SuspiciousActivityReason, SubscriptionPlan, Subscription, SubscriptionStatus,
+    ContractConfig,
 };
 
 // ── Contract ──────────────────────────────────────────────────────────────────
@@ -729,6 +730,20 @@ impl PaymentProcessingContract {
     ) -> Result<GlobalStats, PaymentError> {
         require_admin(&env, &admin)?;
         Ok(storage::get_global_stats(&env))
+    }
+
+    /// Read-only view of all current admin-configurable parameters.
+    /// Callable by anyone — no authentication required.
+    pub fn get_contract_config(env: Env) -> ContractConfig {
+        ContractConfig {
+            platform_fee_bps: storage::get_platform_fee(&env),
+            refund_window_secs: storage::get_refund_window(&env),
+            min_refund_amount: storage::get_min_refund_amount(&env),
+            multisig_expiry_duration_secs: storage::get_multisig_expiry_duration(&env),
+            max_refunds_per_order: storage::get_max_refunds_per_order(&env),
+            payment_cleanup_period_secs: storage::get_cleanup_period(&env),
+            large_payment_threshold: storage::get_large_payment_threshold(&env),
+        }
     }
 
     // ── Refunds ───────────────────────────────────────────────────────────────

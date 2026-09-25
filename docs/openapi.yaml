@@ -1,0 +1,237 @@
+openapi: "3.1.0"
+info:
+  title: LumenFlow Contract API
+  version: "1.0.0"
+  description: >
+    Off-chain REST-like representation of the LumenFlow Soroban smart contract endpoints.
+    All interactions are ultimately on-chain; this spec serves as documentation
+    for tooling, SDK generation, and frontend integrations.
+  license:
+    name: MIT
+
+servers:
+  - url: "https://rpc-mainnet.stellar.org"
+    description: Soroban RPC (mainnet)
+  - url: "https://soroban-testnet.stellar.org"
+    description: Soroban RPC (testnet)
+
+tags:
+  - name: Admin
+    description: Admin-only configuration and management functions
+  - name: Config
+    description: Read-only contract configuration queries
+  - name: Merchant
+    description: Merchant registration and profile management
+  - name: Payment
+    description: Payment processing and history
+  - name: Refund
+    description: Refund lifecycle management
+  - name: Multisig
+    description: Multi-signature payment flows
+
+paths:
+  /get_contract_config:
+    get:
+      summary: Get current contract configuration
+      description: >
+        Returns all admin-configurable parameters in a single `ContractConfig` struct.
+        This is a read-only operation — no authentication or signing required.
+      operationId: getContractConfig
+      tags:
+        - Config
+      responses:
+        "200":
+          description: Current contract configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractConfig"
+              example:
+                platform_fee_bps: 0
+                refund_window_secs: 2592000
+                min_refund_amount: 1
+                multisig_expiry_duration_secs: 604800
+                max_refunds_per_order: 5
+                payment_cleanup_period_secs: 2592000
+                large_payment_threshold: 10000000
+
+  /set_platform_fee:
+    post:
+      summary: Set platform fee (admin only)
+      description: >
+        Updates the platform fee in basis points and emits a `lumenflow/config_updated` event.
+      operationId: setPlatformFee
+      tags:
+        - Admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [admin, fee_bps]
+              properties:
+                admin:
+                  type: string
+                  description: Admin Stellar address
+                fee_bps:
+                  type: integer
+                  format: uint32
+                  description: Fee in basis points (100 = 1%)
+      responses:
+        "200":
+          description: Fee updated successfully
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /set_refund_window:
+    post:
+      summary: Set refund window (admin only)
+      description: >
+        Updates the refund eligibility window in seconds and emits a `lumenflow/config_updated` event.
+      operationId: setRefundWindow
+      tags:
+        - Admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [admin, window_secs]
+              properties:
+                admin:
+                  type: string
+                  description: Admin Stellar address
+                window_secs:
+                  type: integer
+                  format: uint64
+                  description: Refund window duration in seconds
+      responses:
+        "200":
+          description: Refund window updated successfully
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /set_min_refund_amount:
+    post:
+      summary: Set minimum refund amount (admin only)
+      description: >
+        Updates the minimum allowed refund amount and emits a `lumenflow/config_updated` event.
+      operationId: setMinRefundAmount
+      tags:
+        - Admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [admin, min_amount]
+              properties:
+                admin:
+                  type: string
+                  description: Admin Stellar address
+                min_amount:
+                  type: integer
+                  format: int128
+                  description: Minimum refund amount in token base units (must be > 0)
+      responses:
+        "200":
+          description: Minimum refund amount updated successfully
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          description: Invalid amount (must be positive)
+
+  /set_multisig_expiry_duration:
+    post:
+      summary: Set multisig expiry duration (admin only)
+      description: >
+        Updates the multisig payment expiry duration in seconds and emits a `lumenflow/config_updated` event.
+      operationId: setMultisigExpiryDuration
+      tags:
+        - Admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [admin, duration_secs]
+              properties:
+                admin:
+                  type: string
+                  description: Admin Stellar address
+                duration_secs:
+                  type: integer
+                  format: uint64
+                  description: Expiry duration in seconds
+      responses:
+        "200":
+          description: Multisig expiry duration updated successfully
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+components:
+  schemas:
+    ContractConfig:
+      type: object
+      description: >
+        All admin-configurable contract parameters. Returned by `get_contract_config`.
+      required:
+        - platform_fee_bps
+        - refund_window_secs
+        - min_refund_amount
+        - multisig_expiry_duration_secs
+        - max_refunds_per_order
+        - payment_cleanup_period_secs
+        - large_payment_threshold
+      properties:
+        platform_fee_bps:
+          type: integer
+          format: uint32
+          description: Platform fee in basis points (100 bps = 1%). Default 0.
+          example: 0
+        refund_window_secs:
+          type: integer
+          format: uint64
+          description: Refund eligibility window in seconds. Default 2592000 (30 days).
+          example: 2592000
+        min_refund_amount:
+          type: integer
+          format: int128
+          description: Minimum allowed refund amount in token base units. Default 1.
+          example: 1
+        multisig_expiry_duration_secs:
+          type: integer
+          format: uint64
+          description: Duration before an unexecuted multisig payment is considered expired. Default 604800 (7 days).
+          example: 604800
+        max_refunds_per_order:
+          type: integer
+          format: uint32
+          description: Maximum pending refunds per payment order. Default 5.
+          example: 5
+        payment_cleanup_period_secs:
+          type: integer
+          format: uint64
+          description: Payment record age before automatic cleanup eligibility. Default 2592000 (30 days).
+          example: 2592000
+        large_payment_threshold:
+          type: integer
+          format: int128
+          description: Payment amount threshold that triggers a suspicious_activity event. Default 10000000.
+          example: 10000000
+
+  responses:
+    Unauthorized:
+      description: Caller is not the contract admin
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Unauthorized"

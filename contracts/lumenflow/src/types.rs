@@ -207,6 +207,32 @@ pub struct GlobalStats {
     pub active_merchants: u32,
 }
 
+// ── Contract Configuration ────────────────────────────────────────────────────
+
+/// All admin-configurable parameters returned by `get_contract_config`.
+/// This struct is read-only and callable by anyone.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractConfig {
+    /// Platform fee in basis points (100 bps = 1%). Default: 0.
+    pub platform_fee_bps: u32,
+    /// Refund eligibility window in seconds. Default: 2_592_000 (30 days).
+    pub refund_window_secs: u64,
+    /// Minimum allowed refund amount in token base units. Default: 1.
+    pub min_refund_amount: i128,
+    /// Duration in seconds before an unexecuted multisig payment can be considered
+    /// expired. Default: 604_800 (7 days).
+    pub multisig_expiry_duration_secs: u64,
+    /// Maximum number of pending refunds allowed per order. Default: 5.
+    pub max_refunds_per_order: u32,
+    /// Payment record age in seconds before eligibility for automatic cleanup.
+    /// Default: 2_592_000 (30 days).
+    pub payment_cleanup_period_secs: u64,
+    /// Threshold above which a payment triggers a `suspicious_activity` event.
+    /// Default: 10_000_000.
+    pub large_payment_threshold: i128,
+}
+
 // ── Suspicious Activity ───────────────────────────────────────────────────────
 
 #[contracttype]
